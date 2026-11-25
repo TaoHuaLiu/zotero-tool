@@ -17,6 +17,7 @@ import re
 import time
 import unicodedata
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,7 @@ import httpx
 OPENALEX = "https://api.openalex.org"
 SKIP_TYPES = {"attachment", "note", "annotation"}
 TITLE_MATCH = 0.9
+WORKERS = 8
 UA = "zotero-tool (+https://github.com/TaoHuaLiu/zotero-tool)"
 
 
@@ -45,7 +47,10 @@ class Fetcher:
     zot: Any  # pyzotero client
     http: httpx.Client = field(
         default_factory=lambda: httpx.Client(
-            follow_redirects=True, timeout=60, headers={"User-Agent": UA}
+            follow_redirects=True,
+            timeout=httpx.Timeout(20, connect=10),
+            headers={"User-Agent": UA},
+            limits=httpx.Limits(max_connections=WORKERS * 2),
         )
     )
     openalex_key: str | None = field(default_factory=lambda: os.environ.get("OPENALEX_API_KEY"))
@@ -151,11 +156,11 @@ class Fetcher:
         self.outdir.mkdir(parents=True, exist_ok=True)
         refs = [i for i in items if i["data"]["itemType"] not in SKIP_TYPES]
         results = []
-        for item in refs:
-            res = self.fetch_one(item, items)
-            results.append(res)
-            if progress:
-                progress(res)
+        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+            for res in pool.map(lambda it: self.fetch_one(it, items), refs):
+                results.append(res)  # pool.map keeps the library's order
+                if progress:
+                    progress(res)
         self.write_report(results)
         return results
 
