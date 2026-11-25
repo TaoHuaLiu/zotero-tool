@@ -5,6 +5,7 @@ Command-line CRUD for Zotero **group (shared) libraries** through the [Zotero We
 - Items: list / search, get, create (from flags or JSON), update fields, tags, collections and creators, trash / restore, permanent delete
 - Collections: list, create, rename / move, delete
 - Tags: list, rename across the library, delete
+- PDFs: download one PDF per reference, from the library's stored attachments or else a legal open-access copy found on [OpenAlex](https://openalex.org) (by DOI, or by close title match)
 - Safe in a shared library: every write sends the object's version, so a change made meanwhile by another member is refused (HTTP 412) instead of overwritten; `--dry-run` shows the payload; destructive commands ask for confirmation; `items trash` is recoverable from Zotero.
 
 ## Setup
@@ -58,6 +59,15 @@ uv run zotero-tool collections create "Week 3" --parent PBDXD24Z
 uv run zotero-tool collections update KEY --name "Week 3 (done)"
 uv run zotero-tool tags rename "to read" to-read
 ```
+
+## PDFs
+
+```sh
+uv run zotero-tool pdfs fetch --out pdfs/            # whole library; re-runs skip files already there
+uv run zotero-tool pdfs fetch -c PBDXD24Z -o pdfs/   # one collection
+```
+
+Every reference gets a line in `pdfs/report.csv`: `zotero` / `openalex` (downloaded), `exists`, `no_oa` (found, no free copy known), `not_found` (no OpenAlex match), `failed` (free copy known but the host refused or served a web page). Paywalled publisher PDFs are not fetched. Set `OPENALEX_API_KEY` for a dedicated OpenAlex quota (optional). `pdfs/` is git-ignored.
 
 ## Development
 

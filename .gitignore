@@ -19,3 +19,7 @@ _build/
 .pytest_cache/
 .ruff_cache/
 .venv.nosync/
+
+# Downloaded PDFs (copyrighted, never commit)
+pdfs/
+*.pdf

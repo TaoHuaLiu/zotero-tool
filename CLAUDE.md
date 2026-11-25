@@ -14,6 +14,7 @@ uv run zotero-tool --help                 # CLI; global options go BEFORE the su
 uv run zotero-tool -g 6761034 items list  # group "MR", the shared library this was built for
 uv run pytest                             # all tests (offline)
 uv run pytest tests/test_library.py::test_trash_sets_deleted_flag   # one test
+uv run zotero-tool -g 6761034 pdfs fetch -o pdfs/   # MR has no stored files: all PDFs come from OpenAlex
 uv run ruff check . && uv run ruff format .
 ```
 
@@ -27,6 +28,7 @@ uv run ruff check . && uv run ruff format .
   - Delete has two levels: `trash_items` PATCHes `deleted: 1` (recoverable), `delete_items` is permanent.
   - Writes are chunked at 50 objects (API limit); `create_items` re-offsets the per-batch result indexes.
 - `cli.py`: thin Typer layer. Sub-apps `items`, `collections`, `tags`; global flags live in a module-level `state` set by the callback. `emit()` prints a rich table or JSON (`--json`). Destructive commands call `confirm()` (skipped by `--yes` or `--dry-run`).
+- `pdfs.py`: `Fetcher` behind `pdfs fetch`. Per reference: stored PDF attachment (`zot.dump`), else OpenAlex by DOI, else OpenAlex `title.search` accepted only at similarity ≥ 0.9; a download counts only if the body starts with `%PDF`. Writes `report.csv` in the output folder. Downloaded PDFs are copyrighted: `pdfs/` and `*.pdf` are git-ignored and must stay so in this public repo.
 - `tests/test_library.py` uses a `FakeZotero` in-memory stand-in; add the pyzotero methods a new feature calls to it rather than hitting the network.
 
 ## Gotchas

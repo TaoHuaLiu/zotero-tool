@@ -22,6 +22,8 @@ tags_app = typer.Typer(no_args_is_help=True, help="Manage tags.")
 app.add_typer(items_app, name="items")
 app.add_typer(cols_app, name="collections")
 app.add_typer(tags_app, name="tags")
+pdfs_app = typer.Typer(no_args_is_help=True, help="Download PDFs for the library's references.")
+app.add_typer(pdfs_app, name="pdfs")
 
 out = Console()
 err = Console(stderr=True)
@@ -343,6 +345,46 @@ def tags_delete(tags: list[str], yes: Annotated[bool, typer.Option("--yes", "-y"
     """Remove tags from every item."""
     confirm(f"Remove {len(tags)} tag(s) from all items?", yes)
     emit(lib().delete_tags(tags))
+
+
+# ---------------------------------------------------------------- pdfs
+
+
+@pdfs_app.command("fetch")
+def pdfs_fetch(
+    out_dir: Annotated[Path, typer.Option("--out", "-o", help="Folder for the PDFs.")] = Path(
+        "pdfs"
+    ),
+    collection: Annotated[str | None, typer.Option("--collection", "-c")] = None,
+) -> None:
+    """Download a PDF per reference: stored attachment first, else open access via OpenAlex.
+
+    Already-downloaded files are skipped, so the command can be re-run. A report of
+    every reference (found or not, and why) is written to OUT/report.csv.
+    """
+    from collections import Counter
+
+    from .pdfs import Fetcher
+
+    library = lib()
+    if collection:
+        items = library.z.everything(library.z.collection_items(collection))
+    else:
+        items = library.z.everything(library.z.items())
+    fetcher = Fetcher(out_dir, library.z)
+    colors = {"zotero": "green", "openalex": "green", "exists": "dim", "failed": "red"}
+
+    def show(r) -> None:
+        c = colors.get(r.status, "yellow")
+        err.print(f"[{c}]{r.status:9}[/{c}] {r.key}  {r.title[:70]}")
+
+    results = fetcher.fetch_all(items, progress=None if state.as_json else show)
+    counts = Counter(r.status for r in results)
+    if state.as_json:
+        emit([r.__dict__ for r in results])
+    else:
+        out.print(dict(counts))
+        out.print(f"PDFs in {out_dir}/, report: {out_dir}/report.csv")
 
 
 def main() -> None:
