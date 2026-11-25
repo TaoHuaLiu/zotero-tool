@@ -88,15 +88,16 @@ class Fetcher:
         params = dict(params or {})
         if self.openalex_key:
             params["api_key"] = self.openalex_key
-        for attempt in range(3):
+        for attempt in range(5):
             r = self.http.get(f"{OPENALEX}{path}", params=params)
             if r.status_code == 404:
                 return None
-            if r.status_code == 429:
-                time.sleep(2 * (attempt + 1))
+            if r.status_code == 429:  # rate limited: back off, never report as "not found"
+                time.sleep(2**attempt)
                 continue
             r.raise_for_status()
             return r.json()
+        r.raise_for_status()  # still 429: surfaces as status "failed", not "not_found"
         return None
 
     def openalex_work(self, item: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:

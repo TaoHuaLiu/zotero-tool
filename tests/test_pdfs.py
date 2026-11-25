@@ -28,3 +28,16 @@ def test_pdf_urls_dedup_and_only_oa_locations():
         "locations": [{"is_oa": True, "pdf_url": "b"}, {"is_oa": False, "pdf_url": "c"}],
     }
     assert Fetcher.pdf_urls(work) == ["a", "b"]
+
+
+def test_openalex_rate_limit_is_an_error_not_a_miss(monkeypatch, tmp_path):
+    import httpx
+
+    from zotero_tool import pdfs
+
+    monkeypatch.setattr(pdfs.time, "sleep", lambda s: None)
+    client = httpx.Client(transport=httpx.MockTransport(lambda req: httpx.Response(429)))
+    f = Fetcher(outdir=tmp_path, zot=None, http=client, openalex_key=None)
+    item = {"key": "K", "data": {"key": "K", "itemType": "book", "title": "T", "DOI": "10.1/x"}}
+    res = f.fetch_one(item, [])
+    assert res.status == "failed" and "OpenAlex" in res.detail
