@@ -23,3 +23,8 @@ _build/
 # Downloaded PDFs (copyrighted, never commit)
 pdfs/
 *.pdf
+
+# Library exports (personal research data)
+*.xlsx
+*.csv
+~$*

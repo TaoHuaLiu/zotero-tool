@@ -29,6 +29,9 @@ uv run ruff check . && uv run ruff format .
   - Writes are chunked at 50 objects (API limit); `create_items` re-offsets the per-batch result indexes.
 - `cli.py`: thin Typer layer. Sub-apps `items`, `collections`, `tags`; global flags live in a module-level `state` set by the callback. `emit()` prints a rich table or JSON (`--json`). Destructive commands call `confirm()` (skipped by `--yes` or `--dry-run`).
 - `pdfs.py`: `Fetcher` behind `pdfs fetch`. Per reference: stored PDF attachment (`zot.dump`), else OpenAlex by DOI, else OpenAlex `title.search` accepted only at similarity ≥ 0.9; a download counts only if the body starts with `%PDF`. Writes `report.csv` in the output folder. Downloaded PDFs are copyrighted: `pdfs/` and `*.pdf` are git-ignored and must stay so in this public repo.
+- `manual.py`: the hand-off for blocked downloads. `pdfs links` writes `pdfs/missing.html` from `report.csv` (its `links` column) and opens it in Chrome; `pdfs import` matches PDFs in `~/Downloads` to missing references (DOI, then title prefix in `pdftotext` output) and copies them under `Fetcher.filename`. The item key is always the last `_` part of a PDF's file name; `pdfs upload` relies on it.
+- `pdfs upload` (`Library.attach_pdf` / `fill_attachment`) writes files into the shared group: add-only, skips items that already have a PDF. Run it with `-n` first and with `-k` keys to limit it.
+- Do not try to get past publishers' bot blocks (browser User-Agent spoofing etc.): Claude Code's permission checks refuse it, and blocked free copies go through `pdfs links` → Chrome → `pdfs import` instead.
 - `tests/test_library.py` uses a `FakeZotero` in-memory stand-in; add the pyzotero methods a new feature calls to it rather than hitting the network.
 
 ## Gotchas

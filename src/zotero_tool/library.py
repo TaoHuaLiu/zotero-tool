@@ -131,6 +131,31 @@ class Library:
     def count(self) -> int:
         return self.z.count_items()
 
+    # ---------- attachments ----------
+
+    def pdf_attachments(self, key: str) -> list[dict[str, Any]]:
+        """Stored or linked PDF attachments that are children of item `key`."""
+        return [
+            c
+            for c in self.z.children(key)
+            if c["data"].get("itemType") == "attachment"
+            and c["data"].get("contentType") == "application/pdf"
+        ]
+
+    def attach_pdf(self, parent_key: str, path: str, title: str = "Full Text PDF") -> Any:
+        """Upload `path` as a stored-file child attachment of `parent_key` (adds only)."""
+        payload = {"parentItem": parent_key, "title": title, "filename": path}
+        if self.dry_run:
+            return {"dry_run": payload}
+        return self.z.attachment_both([(title, path)], parentid=parent_key)
+
+    def fill_attachment(self, att_key: str, path: str) -> Any:
+        """Upload `path` into an existing attachment item whose file never arrived."""
+        payload = {"key": att_key, "filename": path}
+        if self.dry_run:
+            return {"dry_run": payload}
+        return self.z.upload_attachments([payload])
+
     # ---------- create ----------
 
     def new_item(

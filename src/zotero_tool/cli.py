@@ -387,6 +387,110 @@ def pdfs_fetch(
         out.print(f"PDFs in {out_dir}/, report: {out_dir}/report.csv")
 
 
+def _library_items(collection: str | None) -> list[dict]:
+    library = lib()
+    z = library.z
+    return z.everything(z.collection_items(collection) if collection else z.items())
+
+
+@pdfs_app.command("links")
+def pdfs_links(
+    out_dir: Annotated[Path, typer.Option("--out", "-o", help="PDF folder.")] = Path("pdfs"),
+    collection: Annotated[str | None, typer.Option("--collection", "-c")] = None,
+    open_: Annotated[
+        bool, typer.Option("--open/--no-open", help="Open the page in Chrome.")
+    ] = True,
+) -> None:
+    """Write OUT/missing.html: a checklist of missing PDFs with links to open by hand."""
+    import subprocess
+
+    from .manual import links_page, missing
+
+    todo = missing(_library_items(collection), out_dir)
+    page = links_page(todo, out_dir)
+    out.print(f"{len(todo)} missing PDFs listed in {page}")
+    if open_:
+        subprocess.run(["open", "-a", "Google Chrome", str(page)], check=False)
+
+
+@pdfs_app.command("import")
+def pdfs_import(
+    src: Annotated[Path, typer.Option("--from", help="Folder the PDFs were saved to.")] = Path(
+        "~/Downloads"
+    ),
+    out_dir: Annotated[Path, typer.Option("--out", "-o", help="PDF folder.")] = Path("pdfs"),
+    since: Annotated[
+        float, typer.Option(help="Only PDFs saved in the last N hours (0 = all).")
+    ] = 24,
+    collection: Annotated[str | None, typer.Option("--collection", "-c")] = None,
+) -> None:
+    """Copy PDFs saved by hand into OUT, matched to missing references by DOI or title."""
+    from .manual import import_pdfs, links_page, missing
+
+    todo = missing(_library_items(collection), out_dir)
+    imported, unmatched = import_pdfs(src.expanduser(), todo, out_dir, since or None)
+    for pdf, name in imported:
+        out.print(f"[green]imported[/green] {pdf.name} -> {name}")
+    for pdf in unmatched:
+        out.print(f"[yellow]no match[/yellow] {pdf.name}")
+    left = missing(_library_items(collection), out_dir)
+    links_page(left, out_dir)
+    out.print(f"{len(imported)} imported, {len(unmatched)} unmatched, {len(left)} still missing")
+
+
+@pdfs_app.command("upload")
+def pdfs_upload(
+    out_dir: Annotated[Path, typer.Option("--out", "-o", help="PDF folder.")] = Path("pdfs"),
+    keys: Annotated[
+        list[str] | None, typer.Option("--key", "-k", help="Only these item keys.")
+    ] = None,
+    limit: Annotated[int, typer.Option(help="Upload at most N files (0 = all).")] = 0,
+) -> None:
+    """Attach the PDFs in OUT to their Zotero items (key = last `_` part of the file name).
+
+    Only adds attachments: items that already have a PDF attachment are skipped.
+    """
+    library = lib()
+    pdfs = sorted(out_dir.glob("*.pdf"))
+    if keys:
+        wanted = set(keys)
+        pdfs = [p for p in pdfs if p.stem.rsplit("_", 1)[-1] in wanted]
+    done, failed = 0, []
+    for pdf in pdfs:
+        if limit and done >= limit:
+            break
+        key = pdf.stem.rsplit("_", 1)[-1]
+        path = str(pdf.resolve())
+        try:
+            atts = library.pdf_attachments(key)
+            if any(
+                a["data"].get("md5") or a["data"].get("linkMode") != "imported_file" for a in atts
+            ):
+                err.print(f"[dim]skip     [/dim] {key}  already has a PDF")
+                continue
+            if atts:  # attachment item created earlier but its file upload failed
+                res = library.fill_attachment(atts[0]["key"], path)
+                verb = "filled   "
+            else:
+                res = library.attach_pdf(key, path)
+                verb = "uploaded "
+        except Exception as e:  # keep going; a re-run fills what failed
+            failed.append(key)
+            err.print(f"[red]failed   [/red] {key}  {str(e).strip().splitlines()[-1]}")
+            continue
+        if "dry_run" in res:
+            err.print(f"[cyan]dry-run  [/cyan] {key}  {pdf.name}")
+        elif res.get("success") or res.get("unchanged"):
+            err.print(f"[green]{verb}[/green] {key}")
+        else:
+            failed.append(key)
+            err.print(f"[red]failed   [/red] {key}  {res.get('failure')}")
+        done += 1
+    if failed:
+        err.print(f"[red]{len(failed)} failed[/red]: {' '.join(failed)} (re-run to retry)")
+    out.print(f"{done} PDF(s) {'would be ' if state.dry_run else ''}attached")
+
+
 def main() -> None:
     try:
         app()

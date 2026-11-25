@@ -35,10 +35,11 @@ UA = "zotero-tool (+https://github.com/TaoHuaLiu/zotero-tool)"
 class Result:
     key: str
     title: str
-    status: str  # zotero | openalex | exists | no_oa | not_found | failed
+    status: str  # zotero | openalex | item_url | exists | no_oa | not_found | failed
     source: str = ""
     file: str = ""
     detail: str = ""
+    links: list[str] = field(default_factory=list)  # pages to try by hand in a browser
 
 
 @dataclass
@@ -181,6 +182,25 @@ class Fetcher:
                 return res
             except Exception as e:  # fall back to OpenAlex
                 res.detail = f"zotero file: {e}; "
+        res = self._from_openalex(item, dest, res)
+        if res.status in ("openalex", "zotero"):
+            return res
+        # last resort: the item's own URL, when it serves a PDF directly
+        url = (d.get("url") or "").strip()
+        if url and url not in res.links:
+            err = self.download(url, dest)
+            if not err:
+                res.status, res.source, res.file = "item_url", url, name
+                return res
+            res.detail += f" | item url {url} -> {err}"
+        if url:
+            res.links.append(url)
+        if d.get("DOI"):
+            res.links.append(f"https://doi.org/{clean_doi(d['DOI'])}")
+        res.links = list(dict.fromkeys(res.links))
+        return res
+
+    def _from_openalex(self, item: dict[str, Any], dest: Path, res: Result) -> Result:
         try:
             work, how = self.openalex_work(item)
         except httpx.HTTPError as e:
@@ -202,6 +222,7 @@ class Fetcher:
                 res.status, res.source = "openalex", url
                 return res
             errors.append(f"{url} -> {err}")
+            res.links.append(url)
         res.status, res.file, res.source = "failed", "", f"{work['id']} ({how})"
         res.detail += " | ".join(errors)
         return res
@@ -210,9 +231,11 @@ class Fetcher:
         path = self.outdir / "report.csv"
         with path.open("w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
-            w.writerow(["key", "status", "file", "source", "title", "detail"])
+            w.writerow(["key", "status", "file", "source", "title", "detail", "links"])
             for r in results:
-                w.writerow([r.key, r.status, r.file, r.source, r.title, r.detail])
+                w.writerow(
+                    [r.key, r.status, r.file, r.source, r.title, r.detail, " ".join(r.links)]
+                )
         return path
 
 

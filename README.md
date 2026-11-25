@@ -5,7 +5,7 @@ Command-line CRUD for Zotero **group (shared) libraries** through the [Zotero We
 - Items: list / search, get, create (from flags or JSON), update fields, tags, collections and creators, trash / restore, permanent delete
 - Collections: list, create, rename / move, delete
 - Tags: list, rename across the library, delete
-- PDFs: download one PDF per reference, from the library's stored attachments or else a legal open-access copy found on [OpenAlex](https://openalex.org) (by DOI, or by close title match)
+- PDFs: list what is missing, import what you saved by hand, attach PDFs to the items; download one PDF per reference, from the library's stored attachments or else a legal open-access copy found on [OpenAlex](https://openalex.org) (by DOI, or by close title match)
 - Safe in a shared library: every write sends the object's version, so a change made meanwhile by another member is refused (HTTP 412) instead of overwritten; `--dry-run` shows the payload; destructive commands ask for confirmation; `items trash` is recoverable from Zotero.
 
 ## Setup
@@ -65,9 +65,14 @@ uv run zotero-tool tags rename "to read" to-read
 ```sh
 uv run zotero-tool pdfs fetch --out pdfs/            # whole library; re-runs skip files already there
 uv run zotero-tool pdfs fetch -c PBDXD24Z -o pdfs/   # one collection
+uv run zotero-tool pdfs links                        # pdfs/missing.html in Chrome: what is left, with links
+uv run zotero-tool pdfs import --since 8             # match PDFs saved to ~/Downloads (DOI/title) into pdfs/
+uv run zotero-tool -n pdfs upload -k KEY1 -k KEY2    # attach to the Zotero items (dry run; drop -n to upload)
 ```
 
-Every reference gets a line in `pdfs/report.csv`: `zotero` / `openalex` (downloaded), `exists`, `no_oa` (found, no free copy known), `not_found` (no OpenAlex match), `failed` (free copy known but the host refused or served a web page). Paywalled publisher PDFs are not fetched. Set `OPENALEX_API_KEY` for a dedicated OpenAlex quota (optional). `pdfs/` is git-ignored.
+`pdfs fetch` falls back to the item's own URL when it serves a PDF. `pdfs import` reads the first two pages with `pdftotext` (poppler) and matches by DOI, then by the first words of the title. `pdfs upload` only adds attachments: an item that already has a PDF is skipped, and a re-run fills uploads that failed.
+
+Every reference gets a line in `pdfs/report.csv`: `zotero` / `openalex` / `item_url` (downloaded), `exists`, `no_oa` (found, no free copy known), `not_found` (no OpenAlex match), `failed` (free copy known but the host refused or served a web page). Paywalled publisher PDFs are not fetched. Set `OPENALEX_API_KEY` for a dedicated OpenAlex quota (optional). `pdfs/` is git-ignored.
 
 ## Development
 
